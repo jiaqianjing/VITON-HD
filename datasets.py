@@ -153,20 +153,27 @@ class VITONDataset(data.Dataset):
         parse_agnostic = self.get_parse_agnostic(parse, pose_data)
         parse_agnostic = torch.from_numpy(np.array(parse_agnostic)[None]).long()
 
+        """
+        CIHP-PGN classes(https://github.com/jiaqianjing/CIHP_PGN/blob/81b64c3d867745b2fa6bca12848fa9469df88d01/evaluation/test_inst_part_ap.py#L9):
+            CLASSES = ['background', 'hat', 'hair', 'glove', 'sunglasses', 'upperclothes',
+                       'dress', 'coat', 'socks', 'pants', 'tosor-skin', 'scarf', 'skirt',
+                       'face', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg', 'leftShoe', 'rightShoe']
+        map VITON-HD human segment label
+        """
         labels = {
-            0: ['background', [0, 10]],
-            1: ['hair', [1, 2]],
-            2: ['face', [4, 13]],
-            3: ['upper', [5, 6, 7]],
-            4: ['bottom', [9, 12]],
-            5: ['left_arm', [14]],
-            6: ['right_arm', [15]],
-            7: ['left_leg', [16]],
-            8: ['right_leg', [17]],
-            9: ['left_shoe', [18]],
-            10: ['right_shoe', [19]],
-            11: ['socks', [8]],
-            12: ['noise', [3, 11]]
+            0: ['background', [0, 10]],  # background, tosor-skin
+            1: ['hair', [1, 2]],         # hat, hair
+            2: ['face', [4, 13]],        # sunglasses, face
+            3: ['upper', [5, 6, 7]],     # upperclothes, dress, coat
+            4: ['bottom', [9, 12]],      # pants, skirt
+            5: ['left_arm', [14]],       # leftArm
+            6: ['right_arm', [15]],      # rightArm
+            7: ['left_leg', [16]],       # leftLeg
+            8: ['right_leg', [17]],      # rightLeg
+            9: ['left_shoe', [18]],      # leftShoe
+            10: ['right_shoe', [19]],    # rightShoe
+            11: ['socks', [8]],          # socks
+            12: ['noise', [3, 11]]       # glove, scarf
         }
         parse_agnostic_map = torch.zeros(20, self.load_height, self.load_width, dtype=torch.float)
         parse_agnostic_map.scatter_(0, parse_agnostic, 1.0)
