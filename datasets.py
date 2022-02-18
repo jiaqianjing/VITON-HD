@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 import torch
 from torch.utils import data
 from torchvision import transforms
+import cv2
 
 
 class VITONDataset(data.Dataset):
@@ -149,6 +150,16 @@ class VITONDataset(data.Dataset):
         # load parsing image
         parse_name = img_name.replace('.jpg', '.png')
         parse = Image.open(osp.join(self.data_path, 'image-parse', parse_name))
+        
+        # [compatiblity] start
+        if len(parse.split()) > 1:
+            parse_array = np.array(parse)
+            parse_array = parse_array.transpose(2,0,1)
+            parse_array = parse_array[0] + parse_array[1] + parse_array[2]
+            parse_array = cv2.normalize(parse_array, None, 0, 19, cv2.NORM_MINMAX)
+            parse = Image.fromarray(parse_array)
+        # end
+        
         parse = transforms.Resize(self.load_width, interpolation=0)(parse)
         parse_agnostic = self.get_parse_agnostic(parse, pose_data)
         parse_agnostic = torch.from_numpy(np.array(parse_agnostic)[None]).long()
