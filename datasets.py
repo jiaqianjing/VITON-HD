@@ -35,6 +35,19 @@ class VITONDataset(data.Dataset):
         self.c_names['unpaired'] = c_names
 
     def get_parse_agnostic(self, parse, pose_data):
+        """
+        human parsing label:
+            0 background    10 tosor-skin
+            1 hat           11 scarf
+            2 hair          12 skirt
+            3 glove         13 face
+            4 sunglasses    14 leftArm
+            5 upperclothes  15 rightArm
+            6 dress         16 leftLeg
+            7 coat          17 rightLeg
+            8 socks         18 leftShoe
+            9 pants         19 rightShoe
+        """
         parse_array = np.array(parse)
         parse_upper = ((parse_array == 5).astype(np.float32) +
                        (parse_array == 6).astype(np.float32) +
@@ -44,9 +57,10 @@ class VITONDataset(data.Dataset):
         r = 10
         agnostic = parse.copy()
 
-        # mask arms
+        # mask arms (移除左右手臂)
         for parse_id, pose_ids in [(14, [2, 5, 6, 7]), (15, [5, 2, 3, 4])]:
             mask_arm = Image.new('L', (self.load_width, self.load_height), 'black')
+            # 2D 编辑图像函数, 用于编辑上面创建 mask_arm 图片
             mask_arm_draw = ImageDraw.Draw(mask_arm)
             i_prev = pose_ids[0]
             for i in pose_ids[1:]:
@@ -60,7 +74,7 @@ class VITONDataset(data.Dataset):
             parse_arm = (np.array(mask_arm) / 255) * (parse_array == parse_id).astype(np.float32)
             agnostic.paste(0, None, Image.fromarray(np.uint8(parse_arm * 255), 'L'))
 
-        # mask torso & neck
+        # mask torso & neck (移除 humanparsing 的上身躯干和脖子)
         agnostic.paste(0, None, Image.fromarray(np.uint8(parse_upper * 255), 'L'))
         agnostic.paste(0, None, Image.fromarray(np.uint8(parse_neck * 255), 'L'))
 
@@ -124,8 +138,10 @@ class VITONDataset(data.Dataset):
         for key in self.c_names:
             c_name[key] = self.c_names[key][index]
             c[key] = Image.open(osp.join(self.data_path, 'cloth', c_name[key])).convert('RGB')
+            # BILINEAR Interpolation (h, w) -> (size * h/w, size)
             c[key] = transforms.Resize(self.load_width, interpolation=2)(c[key])
             cm[key] = Image.open(osp.join(self.data_path, 'cloth-mask', c_name[key]))
+            # NEAREST Interpolation
             cm[key] = transforms.Resize(self.load_width, interpolation=0)(cm[key])
 
             c[key] = self.transform(c[key])  # [-1,1]
@@ -143,17 +159,18 @@ class VITONDataset(data.Dataset):
         pose_name = img_name.replace('.jpg', '_keypoints.json')
         with open(osp.join(self.data_path, 'openpose-json', pose_name), 'r') as f:
             pose_label = json.load(f)
-            pose_data = pose_label['people'][0]['pose_keypoints_2d']
+            pose_data = pose_label['people'][0]['pose_keypoints_2d'] # 数据格式为 x,y,confidence
             pose_data = np.array(pose_data)
-            pose_data = pose_data.reshape((-1, 3))[:, :2]
+            # opense pose 指示图: https://github.com/jiaqianjing/openpose/blob/master/doc/02_output.md#ui-and-visual-output
+            pose_data = pose_data.reshape((-1, 3))[:, :2] # [25, 2], 即 25 个姿势关键点的坐标 (x, y)
 
         # load parsing image
         parse_name = img_name.replace('.jpg', '.png')
         parse = Image.open(osp.join(self.data_path, 'image-parse', parse_name))
-        
         parse = transforms.Resize(self.load_width, interpolation=0)(parse)
+        
         parse_agnostic = self.get_parse_agnostic(parse, pose_data)
-        parse_agnostic = torch.from_numpy(np.array(parse_agnostic)[None]).long()
+        parse_agnostic = torch.from_numpy(np.array(parse_agnostic)[np.newaxis,:]).long() # [1, 1024, 768]
 
         """
         CIHP-PGN classes(https://github.com/jiaqianjing/CIHP_PGN/blob/81b64c3d867745b2fa6bca12848fa9469df88d01/evaluation/test_inst_part_ap.py#L9):
@@ -177,8 +194,11 @@ class VITONDataset(data.Dataset):
             11: ['socks', [8]],          # socks
             12: ['noise', [3, 11]]       # glove, scarf
         }
+        # [20, 1024, 768]
         parse_agnostic_map = torch.zeros(20, self.load_height, self.load_width, dtype=torch.float)
-        parse_agnostic_map.scatter_(0, parse_agnostic, 1.0)
+        # [20, 1024, 768] one-hot
+        parse_agnostic_map.scatter_(dim=0, index=parse_agnostic, src=1.0)
+        # [13, 1024, 768]
         new_parse_agnostic_map = torch.zeros(self.semantic_nc, self.load_height, self.load_width, dtype=torch.float)
         for i in range(len(labels)):
             for label in labels[i][1]:

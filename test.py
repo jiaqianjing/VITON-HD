@@ -4,7 +4,8 @@ import os
 import torch
 from torch import nn
 from torch.nn import functional as F
-import torchgeometry as tgm
+# import torchgeometry as tgm
+from torchvision.transforms import GaussianBlur
 
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
@@ -54,7 +55,8 @@ def get_opt():
 
 def test(opt, seg, gmm, alias):
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
-    gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
+    # gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
+    gauss = GaussianBlur((15, 15), (3, 3))
     gauss.cuda()
 
     test_dataset = VITONDataset(opt)
