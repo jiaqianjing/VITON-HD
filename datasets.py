@@ -197,7 +197,7 @@ class VITONDataset(data.Dataset):
         # [20, 1024, 768]
         parse_agnostic_map = torch.zeros(20, self.load_height, self.load_width, dtype=torch.float)
         # [20, 1024, 768] one-hot
-        parse_agnostic_map.scatter_(dim=0, index=parse_agnostic, src=1.0)
+        parse_agnostic_map.scatter_(0, parse_agnostic, 1.0)
         # [13, 1024, 768]
         new_parse_agnostic_map = torch.zeros(self.semantic_nc, self.load_height, self.load_width, dtype=torch.float)
         for i in range(len(labels)):
