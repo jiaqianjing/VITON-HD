@@ -56,6 +56,9 @@ class BaseNetwork(nn.Module):
 #                                              SegGenerator-related classes
 # ----------------------------------------------------------------------------------------------------------------------
 class SegGenerator(BaseNetwork):
+    """
+    Segmentation Generateor
+    """
     def __init__(self, opt, input_nc, output_nc=13, norm_layer=nn.InstanceNorm2d):
         super(SegGenerator, self).__init__()
 
@@ -307,6 +310,9 @@ class TpsGridGen(nn.Module):
 
 
 class GMM(nn.Module):
+    """
+    Geometric Matching Module
+    """
     def __init__(self, opt, inputA_nc, inputB_nc):
         super(GMM, self).__init__()
 
@@ -451,6 +457,9 @@ class ALIASResBlock(nn.Module):
 
 
 class ALIASGenerator(BaseNetwork):
+    """
+    Try-On Synthesis
+    """
     def __init__(self, opt, input_nc):
         super(ALIASGenerator, self).__init__()
         self.num_upsampling_layers = opt.num_upsampling_layers

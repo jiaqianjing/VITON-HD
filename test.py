@@ -54,9 +54,10 @@ def get_opt():
 
 
 def test(opt, seg, gmm, alias):
+    # featuremap size 上采样到 (1024, 768)
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
     # gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
-    gauss = GaussianBlur((15, 15), (3, 3))
+    gauss = GaussianBlur((15, 15), sigma=(3, 3))
     gauss.cuda()
 
     test_dataset = VITONDataset(opt)
@@ -74,11 +75,20 @@ def test(opt, seg, gmm, alias):
             cm = inputs['cloth_mask']['unpaired'].cuda()
 
             # Part 1. Segmentation generation
+            # [B, 13, 1024, 768] -> [B, 13, 256, 192]   featuremap size 下采样 1/4 倍
             parse_agnostic_down = F.interpolate(parse_agnostic, size=(256, 192), mode='bilinear')
+            # [B, 3, 1024, 768] -> [B, 3, 256, 192]
             pose_down = F.interpolate(pose, size=(256, 192), mode='bilinear')
+            # [B, 3, 1024, 768] * [B, 1, 1024, 768]  -> [B, 3, 256, 192]   剥离目标衣物的无关的像素值
             c_masked_down = F.interpolate(c * cm, size=(256, 192), mode='bilinear')
+            # [B, 1, 1024, 768] -> [B, 1, 256, 192]
             cm_down = F.interpolate(cm, size=(256, 192), mode='bilinear')
-            seg_input = torch.cat((cm_down, c_masked_down, parse_agnostic_down, pose_down, gen_noise(cm_down.size()).cuda()), dim=1)
+            
+            # [B, 21, 256, 192]
+            seg_input = torch.cat(
+                (cm_down, c_masked_down, parse_agnostic_down, pose_down, gen_noise(cm_down.size()).cuda()), 
+                dim=1
+                )
 
             parse_pred_down = seg(seg_input)
             parse_pred = gauss(up(parse_pred_down))
