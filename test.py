@@ -68,6 +68,7 @@ def test(opt, seg, gmm, alias):
             img_names = inputs['img_name']
             c_names = inputs['c_name']['unpaired']
 
+            # [B, 3, 1024, 768]
             img_agnostic = inputs['img_agnostic'].cuda()
             parse_agnostic = inputs['parse_agnostic'].cuda()
             pose = inputs['pose'].cuda()
@@ -90,10 +91,13 @@ def test(opt, seg, gmm, alias):
                 dim=1
                 )
 
+            # [B, 13, 256, 192]
             parse_pred_down = seg(seg_input)
             parse_pred = gauss(up(parse_pred_down))
+            # [B, 1, 1024, 768]
             parse_pred = parse_pred.argmax(dim=1)[:, None]
 
+            # [B, 13, 1024, 768]
             parse_old = torch.zeros(parse_pred.size(0), 13, opt.load_height, opt.load_width, dtype=torch.float).cuda()
             parse_old.scatter_(1, parse_pred, 1.0)
 
@@ -106,34 +110,48 @@ def test(opt, seg, gmm, alias):
                 5:  ['right_arm',   [6]],
                 6:  ['noise',       [12]]
             }
+            # [B, 7, 1024, 768]
             parse = torch.zeros(parse_pred.size(0), 7, opt.load_height, opt.load_width, dtype=torch.float).cuda()
             for j in range(len(labels)):
                 for label in labels[j][1]:
                     parse[:, j] += parse_old[:, label]
 
             # Part 2. Clothes Deformation
+            # [B, 3, 256, 192] -> Ia
             agnostic_gmm = F.interpolate(img_agnostic, size=(256, 192), mode='nearest')
+            # [B, 1, 256, 192] -> Sc
             parse_cloth_gmm = F.interpolate(parse[:, 2:3], size=(256, 192), mode='nearest')
+            # [B, 3, 256, 192] -> P
             pose_gmm = F.interpolate(pose, size=(256, 192), mode='nearest')
+            # [B, 3, 256, 192] -> c
             c_gmm = F.interpolate(c, size=(256, 192), mode='nearest')
+            # [B, 7, 256, 192]
             gmm_input = torch.cat((parse_cloth_gmm, pose_gmm, agnostic_gmm), dim=1)
 
+            # [B, 1024, 768, 2]
             _, warped_grid = gmm(gmm_input, c_gmm)
+            
+            # [B, 3, 1024, 768]
             warped_c = F.grid_sample(c, warped_grid, padding_mode='border')
+            # [B, 1, 1024, 768]
             warped_cm = F.grid_sample(cm, warped_grid, padding_mode='border')
 
             # Part 3. Try-on synthesis
+            # [B, 1, 1024, 768] = Sc - Wcm
             misalign_mask = parse[:, 2:3] - warped_cm
             misalign_mask[misalign_mask < 0.0] = 0.0
             parse_div = torch.cat((parse, misalign_mask), dim=1)
+            # [B, 8, 1024, 768]
             parse_div[:, 2:3] -= misalign_mask
 
+            # [B, 3, 1024, 768]
             output = alias(torch.cat((img_agnostic, pose, warped_c), dim=1), parse, parse_div, misalign_mask)
-
+            
             unpaired_names = []
             for img_name, c_name in zip(img_names, c_names):
                 unpaired_names.append('{}_{}'.format(img_name.split('_')[0], c_name))
 
+            print("unpaired_names:", unpaired_names)
             save_images(output, unpaired_names, os.path.join(opt.save_dir, opt.name))
 
             if (i + 1) % opt.display_freq == 0:
